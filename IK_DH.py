@@ -64,6 +64,7 @@ def DH_trans_matrix(params):
 def joint_transforms(DH_params):
     transforms = []
 
+
     transforms.append(sp.eye(4)) #Assuming the first first joint is at the origin
 
     for el in DH_params:
@@ -71,6 +72,8 @@ def joint_transforms(DH_params):
         transforms.append(DH_trans_matrix(el))
 
     return transforms
+
+
 
 
 # To get the jacobain we can use the cross product method since we have all of the transformations
@@ -132,6 +135,45 @@ def jacobian_subs(joints, jacobian_sym):
 #jacobian_symbolic = jacobian_expr(DH_params)
 #print("Jacobia Symbolic: ",jacobian_symbolic)
 
+def vecTransform(joints, DH_params, vec):
+    # Convert to list if it's an ndarray
+    transforms = []
+    x = vec[0]
+    y = vec[1]
+    z = vec[2]
+
+    print("XYZ:",x,y,z)
+    vec = sp.Matrix([[1,0,0,x], 
+                     [0,1,0,y], 
+                     [0,0,1,z], 
+                     [0,0,0,1]])
+    
+    transforms.append(vec)
+    
+    for el in DH_params:
+        transforms.append(DH_trans_matrix(el))
+    
+    VecTr = transforms[0]
+
+    for mat in transforms[1:]:
+        VecTr = VecTr * mat 
+
+    VecTr_cur = VecTr
+
+    print("VecTr_cur: ",VecTr_cur)
+
+    print("Joints :", joints)
+
+    VecTr_cur = VecTr_cur.subs(q1, float(joints[0]))
+    VecTr_cur = VecTr_cur.subs(q2, float(joints[1]))
+    VecTr_cur = VecTr_cur.subs(q3, float(joints[2]))
+    VecTr_cur = VecTr_cur.subs(q4, float(joints[3]))
+    VecTr_cur = VecTr_cur.subs(q5, float(joints[4]))
+    VecTr_cur = VecTr_cur.subs(q6, float(joints[5]))
+   
+    return VecTr_cur[0:3,3]
+
+
 def trans_EF_eval(joints, DH_params):
 
     # Convert to list if it's an ndarray
@@ -142,7 +184,7 @@ def trans_EF_eval(joints, DH_params):
     trans_EF = transforms[0]
 
     for mat in transforms[1:]:
-        trans_EF = trans_EF * mat
+        trans_EF = trans_EF * mat 
 
     trans_EF_cur = trans_EF
 
@@ -152,10 +194,12 @@ def trans_EF_eval(joints, DH_params):
     trans_EF_cur = trans_EF_cur.subs(q4, joints[3])
     trans_EF_cur = trans_EF_cur.subs(q5, joints[4])
     trans_EF_cur = trans_EF_cur.subs(q6, joints[5])
-
+   
     return trans_EF_cur
 
+    
 # This is just for visualizing the robot
+
 
 def pose(joints, DH_params):
 
@@ -164,7 +208,6 @@ def pose(joints, DH_params):
         joints = joints.flatten().tolist()
 
     transforms = joint_transforms(DH_params)
-    #--print("Transformation: ",transforms)
 
     trans_EF = trans_EF_eval(joints, DH_params)
 
@@ -192,6 +235,7 @@ def pose(joints, DH_params):
         pos_joint = pos_joint.subs(q5, joints[4])
         pos_joint = pos_joint.subs(q6, joints[5])
 
+        #print("pose joint : ", pos_joint)
         xs.append(pos_joint[0])
         ys.append(pos_joint[1])
         zs.append(pos_joint[2])
@@ -200,6 +244,11 @@ def pose(joints, DH_params):
     ys.append(pos_EF[1])
     zs.append(pos_EF[2])
 
+    for mat in transforms[1:6]:
+            trans_joint = trans_joint*mat
+
+
+    return pos_EF
 
     fig = plt.figure(figsize=(8,8))
     ax = fig.add_subplot(111, projection='3d')
@@ -370,6 +419,7 @@ def i_kine(joints_init, target, DH_params, error_trace=False, no_rotation=False,
 
     return (joints, e_trace) if error_trace else joints
 
+import cv2
 def findDegree(x, y, z, currentJ):
     print("X, Y, Z Input : ", x, ";", y, ";", z)
     rotateJ = [0.,0.,0.,0.,0.,0.]
@@ -381,6 +431,20 @@ def findDegree(x, y, z, currentJ):
                    [0, 0, 0, 1]])
 
     new_j, e_trace = i_kine(joints, target, DH_params, error_trace=True)
+    EF = pose(new_j, DH_params)
+    print("End Effector pos: ", EF)
+    vecX = vecTransform(new_j, DH_params, [0,0,1,1])
+    vecY = vecTransform(new_j, DH_params, [1,0,0,1])
+    vecZ = vecTransform(new_j, DH_params, [0,1,0,1])
+    mat = [[vecX[0:2]],
+           [vecY[0:2]],
+           [vecZ[0:2]]]
+    mat = np.array(mat)
+    #matinv = np.linalg.inv(mat)
+
+    #cv2.waitKey(0)
+    #print("Vec EF :",vecX,vecY,vecZ)
+
     #print(type(new_j))
     #print(new_j[0][0], "New_J 0")
     degJ = []
@@ -390,7 +454,7 @@ def findDegree(x, y, z, currentJ):
     degJ.append(new_j[3][0])
     degJ.append(new_j[4][0])
     degJ.append(new_j[5][0])
-    print(degJ)
+    #print(degJ)
 
     rotateJ[0] = degJ[0] - currentJ[0]
     rotateJ[1] = degJ[1] - currentJ[1]
@@ -398,5 +462,5 @@ def findDegree(x, y, z, currentJ):
     rotateJ[3] = degJ[3] - currentJ[3]
     rotateJ[4] = degJ[4] - currentJ[4]
     rotateJ[5] = degJ[5] - currentJ[5]
-
-    return rotateJ, currentJ, 
+    #print(rotateJ)
+    return rotateJ, currentJ, #matinv
